@@ -1,8 +1,7 @@
-# Khithlainhtet - Fast API-First YouTube Download & Search Handler
+# Khithlainhtet - Fast NexGenBots API-First YouTube Download & Search Handler
 
 import os
 import re
-import glob
 import yt_dlp
 import random
 import asyncio
@@ -52,14 +51,13 @@ class YouTube:
         self.cookie_dir = "Newmusic/cookies"
         self.warned = False
         
-        # --- ပြင်ဆင်သတ်မှတ်ထားသော API နှင့် API KEY များ (တိုက်ရိုက်ထည့်သွင်းထားပါသည်) ---
+        # --- NexGenBots API တိုက်ရိုက်သတ်မှတ်ချက်များ ---
         self.api_url = "https://console.nexgenbots.xyz"
-        self.api_key = "30DxNexGenBots4688e6"
-        self.api_timeout = 30  # ပိုမြန်စေရန် စက္ကန့် ၃၀ သို့ လျှော့ချထားသည်
+        self.api_key = "30DxNexGenBots4688e6"  # Thaw Zin ၏ API Key အမှန်
+        self.api_timeout = 30  
         self.api_retries = 2
-        # ------------------------------------------------------------------------
+        # -------------------------------------------
         
-        # Cookie Directory နှင့် File အလိုအလျောက် တည်ဆောက်ခြင်း
         if not os.path.exists(self.cookie_dir):
             os.makedirs(self.cookie_dir)
         
@@ -77,7 +75,7 @@ class YouTube:
             r"(?!/(watch\?v=[A-Za-z0-9_-]{11}|shorts/[A-Za-z0-9_-]{11}"
             r"|playlist\?list=PL[A-Za-z0-9_-]+|[A-Za-z0-9_-]{11}))\S*"
         )
-        logger.info(f"⚡ [Khithlainhtet] API-First Handler Active: {self.api_url}")
+        logger.info(f"⚡ [Khithlainhtet] NexGenBots API-First Active: {self.api_url}")
 
     def get_cookies(self):
         if os.path.exists(self.cookie_file):
@@ -148,12 +146,12 @@ class YouTube:
         return tracks
 
     async def _api_download(self, video_id: str, video: bool = False) -> str | None:
-        """ArtistBots API သို့ တိုက်ရိုက်ချိတ်ဆက်၍ အမြန်ဆုံးဆွဲချသော စနစ်"""
+        """NexGenBots API သို့ လမ်းကြောင်းမှန်ဖြင့် ချိတ်ဆက်ဒေါင်းလုဒ်ဆွဲသော စနစ်"""
         if not self.api_url:
             return None
             
-        # ဗီဒီယို သို့မဟုတ် သီချင်းအလိုက် သင့်တော်သော Endpoint ကို ရွေးချယ်ခြင်း
-        endpoint = f"{self.api_url}/vdown" if video else f"{self.api_url}/download"
+        # ⭐ NexGenBots ရဲ့ API Route အမှန်များသို့ လဲလှယ်ထားခြင်း
+        endpoint = f"{self.api_url}/api/vdown" if video else f"{self.api_url}/api/download"
         
         DOWNLOAD_DIR = "downloads"
         os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -162,15 +160,19 @@ class YouTube:
         filename = f"{DOWNLOAD_DIR}/{video_id}{ext}"
         
         timeout = aiohttp.ClientTimeout(total=self.api_timeout)
-        headers = {"Authorization": f"Bearer {self.api_key}"}
+        
+        # NexGenBots Token သယ်ဆောင်ရန်အတွက် Headers တည်ဆောက်ခြင်း
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Accept": "application/json"
+        }
         params = {
-            "url": f"https://youtu.be/{video_id}",
-            "api_key": self.api_key
+            "url": f"https://www.youtube.com/watch?v={video_id}"
         }
 
         for attempt in range(self.api_retries):
             try:
-                logger.info(f"🚀 [API FIRST] Downloading {'Video' if video else 'Audio'} from ArtistBots API (Attempt {attempt+1})...")
+                logger.info(f"🚀 [NexGenBots API] Downloading {'Video' if video else 'Audio'} (Attempt {attempt+1})...")
                 async with aiohttp.ClientSession(timeout=timeout) as session:
                     async with session.get(endpoint, params=params, headers=headers) as resp:
                         if resp.status != 200:
@@ -179,10 +181,10 @@ class YouTube:
                             
                         content_type = resp.headers.get('content-type', '')
                         
-                        # Case 1: JSON Response ပြန်လာပြီး အထဲမှ Link ကို ထပ်ဆင့်ဒေါင်းရလျှင်
+                        # JSON Format ပြန်လာလျှင် Download URL ကို ထပ်ထုတ်ယူခြင်း
                         if 'application/json' in content_type:
                             data = await resp.json()
-                            link = data.get("stream_url") or data.get("downloadUrl") or data.get("url") or data.get("data", {}).get("url")
+                            link = data.get("download_url") or data.get("url") or data.get("stream_url") or data.get("data", {}).get("url")
                             if not link:
                                 continue
                                 
@@ -192,40 +194,40 @@ class YouTube:
                                     async for chunk in dl.content.iter_chunked(65536):
                                         fw.write(chunk)
                         
-                        # Case 2: Direct Binary Stream ဖိုင်ကို တိုက်ရိုက် ပို့ပေးလျှင်
+                        # Binary Stream အဖြစ် တိုက်ရိုက်ပြန်လာလျှင် ဖိုင်ထဲတန်းရေးခြင်း
                         else:
                             with open(filename, "wb") as fw:
                                 async for chunk in resp.content.iter_chunked(65536):
                                     fw.write(chunk)
 
-                # ဖိုင်တကယ်ဆွဲပြီးကြောင်းနှင့် ဖိုင်အမှန်ဖြစ်ကြောင်း စစ်ဆေးခြင်း (50KB အထက်)
+                # ဖိုင်တကယ်ဆွဲပြီးကြောင်းနှင့် ဖိုင်အရွယ်အစား မှန်ကန်ကြောင်း စစ်ဆေးခြင်း
                 if Path(filename).exists() and os.path.getsize(filename) > 50000:
                     return filename
                 else:
                     if Path(filename).exists():
                         os.remove(filename)
             except Exception as ex:
-                logger.warning(f"⚠️ API download exception: {ex}")
+                logger.warning(f"⚠️ NexGenBots API exception: {ex}")
                 if Path(filename).exists():
                     try: os.remove(filename)
                     except Exception: pass
         return None
 
     async def download(self, video_id: str, video: bool = False) -> str | None:
-        """Download Manager - Cache ကိုအရင်စစ်၊ ပြီးလျှင် API First သွားမည်၊ မရမှ Local ဒေါင်းမည်"""
+        """Download Manager - Cache စစ်မည်၊ မရှိလျှင် NexGenBots API သုံးမည်၊ မရမှ Local ဒေါင်းမည်"""
         # 1. Local Cache ထဲမှာ ဖိုင်ရှိပြီးသားလား အရင်ရှာမည်
         for ext in ("mp3", "mp4", "webm", "m4a"):
             cached = f"downloads/{video_id}.{ext}"
             if Path(cached).exists() and os.path.getsize(cached) > 50000:
                 return cached
 
-        # 2. ⭐ [API FIRST MODE] အချိန်မဆိုင်းဘဲ ArtistBots API အသစ်ဖြင့် အရင်ဒေါင်းမည်
+        # 2. ⭐ [API FIRST MODE] NexGenBots API အသစ်ဖြင့် အရင်ဆုံး ကြိုးစားဒေါင်းမည်
         api_file = await self._api_download(video_id, video)
         if api_file:
             return api_file
 
-        # 3. 🛡️ [FALLBACK] API မရမှသာ Local yt-dlp ဖြင့် ဒေါင်းလုဒ်လုပ်မည်
-        logger.info(f"🔄 API Failed. Falling back to local yt-dlp for {video_id}...")
+        # 3. 🛡️ [FALLBACK] API မရမှသာ Local yt-dlp ဖြင့် ကွတ်ကီးသုံးပြီး ဒေါင်းမည်
+        logger.info(f"🔄 NexGenBots API Failed. Falling back to local yt-dlp for {video_id}...")
         url = self.base + video_id
         cookie = self.get_cookies()
         
@@ -260,7 +262,6 @@ class YouTube:
                     logger.warning("Local download failed: %s", ex)
                     return None
             
-            # ဒေါင်းလုဒ်ပြီးသွားသော ဖိုင်ကို ရှာဖွေပြီး ပတ်လမ်းကြောင်း ပြန်ပေးခြင်း
             for x in ("mp3", "mp4", "webm", "m4a"):
                 file = f"downloads/{video_id}.{x}"
                 if Path(file).exists() and os.path.getsize(file) > 50000:
