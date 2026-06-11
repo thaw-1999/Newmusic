@@ -53,8 +53,8 @@ class YouTube:
         self.warned = False
         
         # --- ပြင်ဆင်သတ်မှတ်ထားသော API နှင့် API KEY များ (တိုက်ရိုက်ထည့်သွင်းထားပါသည်) ---
-        self.api_url = "https://artistbots.onrender.com"
-        self.api_key = "Artistbots4QUgiSowDdTj2teUYebLx3"
+        self.api_url = "https://console.nexgenbots.xyz"
+        self.api_key = "30DxNexGenBots4688e6"
         self.api_timeout = 30  # ပိုမြန်စေရန် စက္ကန့် ၃၀ သို့ လျှော့ချထားသည်
         self.api_retries = 2
         # ------------------------------------------------------------------------
