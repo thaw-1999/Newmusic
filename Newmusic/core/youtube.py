@@ -54,7 +54,7 @@ class YouTube:
         # --- NexGenBots API တိုက်ရိုက်သတ်မှတ်ချက်များ ---
         self.api_url = "https://console.nexgenbots.xyz"
         self.api_key = "30DxNexGenBots4688e6"  # Thaw Zin ၏ API Key အမှန်
-        self.api_timeout = 30  
+        self.api_timeout = 60  
         self.api_retries = 2
         # -------------------------------------------
         
