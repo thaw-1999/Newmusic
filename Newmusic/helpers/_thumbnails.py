@@ -80,7 +80,7 @@ class Thumbnail:
             bg.paste(border_bg, (cx, cy), border_bg)
 
             # 3. Contact Text
-            contact = "If you want to create your own music bot, please contact @HEX_KING9"
+            contact = "If you want to create your own music bot, please contact "
             draw.text((self.size[0]//2, 45), contact, font=self.font_small, fill="white", anchor="ma")
 
             # 4. Text & Info (ကျော်ထွက်ခြင်းကို ပြင်ဆင်ထားသော အပိုင်း)
@@ -112,7 +112,7 @@ class Thumbnail:
             draw.text((tx_start + 400, ctrl_y), "»", font=self.font_title, fill="white", anchor="ma")
 
             # 8. Bottom Credit
-            draw.text((self.size[0]//2, self.size[1] - 45), "Credit by @HANTHAR999", font=self.font_credit, fill=(255, 255, 255, 180), anchor="ma")
+            draw.text((self.size[0]//2, self.size[1] - 45), "Credit by @Kdaxsteanban_official", font=self.font_credit, fill=(255, 255, 255, 180), anchor="ma")
 
             bg.save(output, "PNG")
             return output
