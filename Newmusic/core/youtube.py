@@ -1,13 +1,12 @@
-# Khithlainhtet - Fast NexGenBots API-First YouTube Download & Search Handler
+# Khithlainhtet - Fast YouTube Stream URL Extractor (No Download)
+# Optimized for low CPU & disk usage, 2-3 seconds startup time
 
 import os
 import re
 import yt_dlp
-import random
 import asyncio
-import aiohttp
 from pathlib import Path
-from urllib.parse import urlparse
+from datetime import datetime, timedelta
 
 from youtubesearchpython.future import Playlist, VideosSearch
 
@@ -46,17 +45,10 @@ COOKIE_DATA = """# Netscape HTTP Cookie File
 class YouTube:
     def __init__(self):
         self.base = "https://www.youtube.com/watch?v="
-        self.cookies = []
-        self.checked = False
         self.cookie_dir = "Newmusic/cookies"
-        self.warned = False
-        
-        # --- NexGenBots API တိုက်ရိုက်သတ်မှတ်ချက်များ ---
-        self.api_url = "https://artistbots.onrender.com"
-        self.api_key = "Artistbots4QUgiSowDdTj2teUYebLx3"  # Thaw Zin ၏ API Key အမှန်
-        self.api_timeout = 60  
-        self.api_retries = 2
-        # -------------------------------------------
+        self.cookie_file = None
+        self.url_cache = {}       # {cache_key: (url, expiry_time)}
+        self.cache_ttl = 3600     # 1 hour cache
         
         if not os.path.exists(self.cookie_dir):
             os.makedirs(self.cookie_dir)
@@ -64,7 +56,8 @@ class YouTube:
         self.cookie_file = f"{self.cookie_dir}/youtube_cookies.txt"
         with open(self.cookie_file, "w", encoding="utf-8") as f:
             f.write(COOKIE_DATA)
-            
+        
+        # Regex for valid & invalid URLs
         self.regex = re.compile(
             r"(https?://)?(www\.|m\.|music\.)?"
             r"(youtube\.com/(watch\?v=|shorts/|playlist\?list=)|youtu\.be/)"
@@ -75,10 +68,11 @@ class YouTube:
             r"(?!/(watch\?v=[A-Za-z0-9_-]{11}|shorts/[A-Za-z0-9_-]{11}"
             r"|playlist\?list=PL[A-Za-z0-9_-]+|[A-Za-z0-9_-]{11}))\S*"
         )
-        logger.info(f"⚡ [Khithlainhtet] NexGenBots API-First Active: {self.api_url}")
+        
+        logger.info("⚡ [Khithlainhtet] Stream URL Mode Active (No download)")
 
     def get_cookies(self):
-        if os.path.exists(self.cookie_file):
+        if self.cookie_file and os.path.exists(self.cookie_file):
             return self.cookie_file
         return None
 
@@ -91,6 +85,7 @@ class YouTube:
     def invalid(self, url: str) -> bool:
         return bool(re.match(self.iregex, url))
 
+    # ---------------- SEARCH & PLAYLIST ----------------
     async def search(self, query: str, m_id: int, video: bool = False) -> Track | None:
         try:
             _search = VideosSearch(query, limit=1)
@@ -145,127 +140,81 @@ class YouTube:
             pass
         return tracks
 
-    async def _api_download(self, video_id: str, video: bool = False) -> str | None:
-        """NexGenBots API သို့ လမ်းကြောင်းမှန်ဖြင့် ချိတ်ဆက်ဒေါင်းလုဒ်ဆွဲသော စနစ်"""
-        if not self.api_url:
-            return None
-            
-        # ⭐ NexGenBots ရဲ့ API Route အမှန်များသို့ လဲလှယ်ထားခြင်း
-        endpoint = f"{self.api_url}/api/vdown" if video else f"{self.api_url}/api/download"
-        
-        DOWNLOAD_DIR = "downloads"
-        os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-        
-        ext = ".mp4" if video else ".mp3"
-        filename = f"{DOWNLOAD_DIR}/{video_id}{ext}"
-        
-        timeout = aiohttp.ClientTimeout(total=self.api_timeout)
-        
-        # NexGenBots Token သယ်ဆောင်ရန်အတွက် Headers တည်ဆောက်ခြင်း
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Accept": "application/json"
-        }
-        params = {
-            "url": f"https://www.youtube.com/watch?v={video_id}"
-        }
-
-        for attempt in range(self.api_retries):
-            try:
-                logger.info(f"🚀 [NexGenBots API] Downloading {'Video' if video else 'Audio'} (Attempt {attempt+1})...")
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    async with session.get(endpoint, params=params, headers=headers) as resp:
-                        if resp.status != 200:
-                            logger.warning(f"⚠️ API status error: {resp.status}")
-                            continue
-                            
-                        content_type = resp.headers.get('content-type', '')
-                        
-                        # JSON Format ပြန်လာလျှင် Download URL ကို ထပ်ထုတ်ယူခြင်း
-                        if 'application/json' in content_type:
-                            data = await resp.json()
-                            link = data.get("download_url") or data.get("url") or data.get("stream_url") or data.get("data", {}).get("url")
-                            if not link:
-                                continue
-                                
-                            async with session.get(link) as dl:
-                                dl.raise_for_status()
-                                with open(filename, "wb") as fw:
-                                    async for chunk in dl.content.iter_chunked(65536):
-                                        fw.write(chunk)
-                        
-                        # Binary Stream အဖြစ် တိုက်ရိုက်ပြန်လာလျှင် ဖိုင်ထဲတန်းရေးခြင်း
-                        else:
-                            with open(filename, "wb") as fw:
-                                async for chunk in resp.content.iter_chunked(65536):
-                                    fw.write(chunk)
-
-                # ဖိုင်တကယ်ဆွဲပြီးကြောင်းနှင့် ဖိုင်အရွယ်အစား မှန်ကန်ကြောင်း စစ်ဆေးခြင်း
-                if Path(filename).exists() and os.path.getsize(filename) > 50000:
-                    return filename
-                else:
-                    if Path(filename).exists():
-                        os.remove(filename)
-            except Exception as ex:
-                logger.warning(f"⚠️ NexGenBots API exception: {ex}")
-                if Path(filename).exists():
-                    try: os.remove(filename)
-                    except Exception: pass
-        return None
-
-    async def download(self, video_id: str, video: bool = False) -> str | None:
-        """Download Manager - Cache စစ်မည်၊ မရှိလျှင် NexGenBots API သုံးမည်၊ မရမှ Local ဒေါင်းမည်"""
-        # 1. Local Cache ထဲမှာ ဖိုင်ရှိပြီးသားလား အရင်ရှာမည်
-        for ext in ("mp3", "mp4", "webm", "m4a"):
-            cached = f"downloads/{video_id}.{ext}"
-            if Path(cached).exists() and os.path.getsize(cached) > 50000:
-                return cached
-
-        # 2. ⭐ [API FIRST MODE] NexGenBots API အသစ်ဖြင့် အရင်ဆုံး ကြိုးစားဒေါင်းမည်
-        api_file = await self._api_download(video_id, video)
-        if api_file:
-            return api_file
-
-        # 3. 🛡️ [FALLBACK] API မရမှသာ Local yt-dlp ဖြင့် ကွတ်ကီးသုံးပြီး ဒေါင်းမည်
-        logger.info(f"🔄 NexGenBots API Failed. Falling back to local yt-dlp for {video_id}...")
+    # ------------------- DIRECT STREAM URL (NO DOWNLOAD) -------------------
+    async def get_stream_url(self, video_id: str, video: bool = False) -> str | None:
+        """
+        Extract direct streaming URL without downloading.
+        - video=False → audio only (fast, low bandwidth)
+        - video=True → video+audio (up to 720p mp4)
+        """
         url = self.base + video_id
         cookie = self.get_cookies()
-        
-        base_opts = {
-            "outtmpl": "downloads/%(id)s.%(ext)s",
+
+        # Simplified format selection for single URL (combined audio+video or pure audio)
+        if video:
+            # Video: best mp4 up to 720p (includes audio)
+            fmt = "best[height<=720][ext=mp4]/best[ext=mp4]/best"
+        else:
+            # Audio: best opus/m4a
+            fmt = "bestaudio[ext=webm][acodec=opus]/bestaudio[ext=m4a]/bestaudio"
+
+        ydl_opts = {
             "quiet": True,
             "noplaylist": True,
             "geo_bypass": True,
             "no_warnings": True,
-            "overwrites": True,
-            "nocheckcertificate": True,
             "cookiefile": cookie,
+            "format": fmt,
         }
 
-        if video:
-            ydl_opts = {
-                **base_opts,
-                "format": "(bestvideo[height<=?1080][ext=mp4])+(bestaudio[ext=m4a]/bestaudio)/best[ext=mp4]/best",
-                "merge_output_format": "mp4",
-            }
-        else:
-            ydl_opts = {
-                **base_opts,
-                "format": "bestaudio[ext=webm][acodec=opus]/bestaudio/best",
-            }
-
-        def _download():
+        def _extract():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                try:
-                    ydl.download([url])
-                except Exception as ex:
-                    logger.warning("Local download failed: %s", ex)
-                    return None
-            
-            for x in ("mp3", "mp4", "webm", "m4a"):
-                file = f"downloads/{video_id}.{x}"
-                if Path(file).exists() and os.path.getsize(file) > 50000:
-                    return file
-            return None
+                info = ydl.extract_info(url, download=False)
+                # Direct stream URL from the selected format
+                return info['url']
 
-        return await asyncio.to_thread(_download)
+        try:
+            stream_url = await asyncio.to_thread(_extract)
+            if stream_url:
+                return stream_url
+        except Exception as e:
+            logger.error(f"Stream URL extraction failed for {video_id}: {e}")
+            # Fallback: best format overall
+            try:
+                ydl_opts_fallback = {
+                    "quiet": True,
+                    "noplaylist": True,
+                    "cookiefile": cookie,
+                    "format": "best",
+                }
+                def _fallback():
+                    with yt_dlp.YoutubeDL(ydl_opts_fallback) as ydl:
+                        info = ydl.extract_info(url, download=False)
+                        return info['url']
+                stream_url = await asyncio.to_thread(_fallback)
+                return stream_url
+            except Exception as e2:
+                logger.error(f"Fallback also failed: {e2}")
+                return None
+
+    # ------------------- CACHED VERSION -------------------
+    async def get_stream_url_cached(self, video_id: str, video: bool = False) -> str | None:
+        """Cached version to avoid repeated extraction (TTL 1 hour)"""
+        now = datetime.now()
+        key = f"{video_id}_{video}"
+        if key in self.url_cache:
+            url, expires = self.url_cache[key]
+            if now < expires:
+                return url
+        url = await self.get_stream_url(video_id, video)
+        if url:
+            self.url_cache[key] = (url, now + timedelta(seconds=self.cache_ttl))
+        return url
+
+    # ------------------- DOWNLOAD METHOD (FOR COMPATIBILITY) -------------------
+    async def download(self, video_id: str, video: bool = False) -> str | None:
+        """
+        Compatibility method for existing code.
+        Returns a direct stream URL instead of downloading a file.
+        """
+        return await self.get_stream_url_cached(video_id, video)
